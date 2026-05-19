@@ -1,0 +1,67 @@
+[
+  {
+    "iteration": 1,
+    "score": 5.0,
+    "evaluation": {
+      "clarity": 5.0,
+      "impact": 5.0,
+      "ats": 5.0,
+      "professionalism": 5.0,
+      "overall_score": 5.0,
+      "issues": [
+        "evaluation_failure"
+      ]
+    },
+    "feedback": {
+      "priority_issues": [
+        "feedback_generation_failure"
+      ],
+      "recommended_actions": [
+        "Regenerate feedback plan"
+      ],
+      "section_targets": []
+    },
+    "diff": {
+      "resolved": [
+        "missing_summary"
+      ],
+      "unresolved": [
+        "weak_action_verbs"
+      ],
+      "new_issues": [
+        "missing_experience",
+        "missing_achievements"
+      ]
+    }
+  },
+  {
+    "iteration": 2,
+    "score": 5.0,
+    "evaluation": {
+      "clarity": 5.0,
+      "impact": 5.0,
+      "ats": 5.0,
+      "professionalism": 5.0,
+      "overall_score": 5.0,
+      "issues": [
+        "evaluation_failure"
+      ]
+    },
+    "feedback": {
+      "priority_issues": [
+        "feedback_generation_failure"
+      ],
+      "recommended_actions": [
+        "Regenerate feedback plan"
+      ],
+      "section_targets": []
+    },
+    "diff": {
+      "resolved": [
+        "weak_action_verbs"
+      ],
+      "unresolved": [],
+      "new_issues": []
+    }
+  }
+]

@@ -1,0 +1,10 @@
+John Doe
+
+Computer Science Student
+
+Skills:
+Python
+Machine Learning
+
+Projects:
+Built a chatbot using Python and OpenAI API.

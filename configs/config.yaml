@@ -1,0 +1,7 @@
+model: "glm-4-flash"
+
+max_iterations: 3
+
+score_threshold: 8.5
+
+temperature: 0.7
