@@ -1,243 +1,85 @@
-# main.py
-
-import json
-import yaml
-
-from copy import deepcopy
-
-from agents.parser_agent import ParserAgent
-from agents.optimizer_agent import OptimizerAgent
-from agents.evaluator_agent import EvaluatorAgent
-from agents.feedback_agent import FeedbackAgent
-from agents.reflection_agent import ReflectionAgent
-from agents.diff_agent import DiffAgent
-
-
-# =========================
-# Config
-# =========================
-
-with open(
-    "configs/config.yaml",
-    "r"
-) as f:
-
-    config = yaml.safe_load(f)
-
-
-# =========================
-# Agents
-# =========================
-
-parser_agent = ParserAgent(config)
-
-optimizer_agent = OptimizerAgent(config)
-
-evaluator_agent = EvaluatorAgent(config)
-
-feedback_agent = FeedbackAgent(config)
-
-reflection_agent = ReflectionAgent(config)
-
-diff_agent = DiffAgent(config)
-
-
-# =========================
-# Load Resume
-# =========================
-
-with open(
-    "data/raw/sample_resume.txt",
-    "r",
-    encoding="utf-8"
-) as f:
-
-    resume_text = f.read()
-
-
-# =========================
-# Parse Resume
-# =========================
-
-parsed_resume = parser_agent.run(
-    resume_text
-)
-
-
-# =========================
-# State
-# =========================
-
-state = {
-
-    "current_resume": parsed_resume,
-
-    "history": [],
-
-    "scores": [],
-
-    "resolved_issues": [],
-
-    "unresolved_issues": []
-}
-
-
-# =========================
-# Main Loop
-# =========================
-
-for iteration in range(
-    config["max_iterations"]
-):
-
-    print(
-        f"\n========== ITERATION {iteration+1} ==========\n"
-    )
-
-    current_resume = state[
-        "current_resume"
-    ]
-
-    # =====================
-    # Evaluate
-    # =====================
-
-    evaluation = evaluator_agent.run(
-        current_resume
-    )
-
-    state["scores"].append(
-        evaluation["overall_score"]
-    )
-
-    # =====================
-    # Feedback
-    # =====================
-
-    feedback = feedback_agent.run(
-
-        resume=current_resume,
-
-        evaluation=evaluation,
-
-        unresolved_issues=state[
-            "unresolved_issues"
-        ]
-    )
-
-    # =====================
-    # Optimize
-    # =====================
-
-    optimized_resume = optimizer_agent.run(
-
-        resume=current_resume,
-
-        feedback=feedback,
-
-        resolved_issues=state[
-            "resolved_issues"
-        ]
-    )
-
-    # =====================
-    # Diff
-    # =====================
-
-    diff = diff_agent.run(
-
-        old_resume=current_resume,
-
-        new_resume=optimized_resume,
-
-        previous_issues=state[
-            "unresolved_issues"
-        ]
-    )
-
-    state["resolved_issues"] = diff[
-        "resolved"
-    ]
-
-    state["unresolved_issues"] = diff[
-        "unresolved"
-    ]
-
-    # =====================
-    # History
-    # =====================
-
-    state["history"].append({
-
-        "iteration": iteration + 1,
-
-        "score": evaluation[
-            "overall_score"
-        ],
-
-        "evaluation": evaluation,
-
-        "feedback": feedback,
-
-        "diff": diff
-    })
-
-    # =====================
-    # Reflection
-    # =====================
-
-    should_continue = (
-        reflection_agent.run(
-
-            scores=state["scores"],
-
-            unresolved_issues=state[
-                "unresolved_issues"
-            ]
-        )
-    )
-
-    state["current_resume"] = (
-        optimized_resume
-    )
-
-    if not should_continue:
-
-        print(
-            "\nOptimization Converged.\n"
-        )
-
-        break
-
-
-# =========================
-# Save
-# =========================
-
-with open(
-    "data/outputs/history.json",
-    "w",
-    encoding="utf-8"
-) as f:
-
-    json.dump(
-        state["history"],
-        f,
-        indent=2,
-        ensure_ascii=False
-    )
-
-with open(
-    "data/outputs/optimized_resume.json",
-    "w",
-    encoding="utf-8"
-) as f:
-
-    json.dump(
-        state["current_resume"],
-        f,
-        indent=2,
-        ensure_ascii=False
-    )
-
-print("\nDone.\n")
+from dsl.parser import WorkflowParser
+from dsl.executor import WorkflowExecutor
+from llm.direct_llm import direct_llm_optimize
+from agents.score_agent import ScoreAgent   # 新增：导入 ScoreAgent 用于单独评分
+
+from docx import Document
+import os
+
+
+def load_resume(filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def save_to_word(text, filename):
+    doc = Document()
+    for line in str(text).split("\n"):
+        doc.add_paragraph(line)
+    doc.save(filename)
+    print(f"Saved: {filename}")
+
+
+def main():
+    # ========= Load Resume =========
+    resume = load_resume("data/raw/sample_resume.txt")
+
+    # ========= Parse Workflow =========
+    parser = WorkflowParser("dsl/workflow.dsl")
+    workflow = parser.parse()
+
+    # ========= Multi-Agent =========
+    executor = WorkflowExecutor(workflow)
+    multi_agent_result = executor.execute(resume)
+
+    # ========= Handle Result =========
+    if isinstance(multi_agent_result, str) and os.path.exists(multi_agent_result):
+        with open(multi_agent_result, "r", encoding="utf-8") as f:
+            multi_agent_resume = f.read()
+    else:
+        multi_agent_resume = str(multi_agent_result)
+
+    # ========= Direct LLM =========
+    direct_resume = direct_llm_optimize(resume)
+
+    # ========= Score both resumes =========
+    scorer = ScoreAgent()
+
+    # 评分 multi-agent 结果（从 context 中取已有的评分，避免重复调用 API）
+    multi_score = executor.context.get("score_report")
+    if not multi_score or not isinstance(multi_score, dict):
+        print("Multi-agent score not found, re-scoring...")
+        multi_score = scorer.run(multi_agent_resume)
+
+    # 评分 direct LLM 结果
+    print("\nScoring Direct LLM resume...")
+    direct_score = scorer.run(direct_resume)
+
+    # ========= Print =========
+    print("\n=== Multi-Agent Resume ===\n")
+    print(multi_agent_resume)
+
+    print("\n=== Direct LLM Resume ===\n")
+    print(direct_resume)
+
+    # ========= Print Scores =========
+    print("\n========== Score Comparison ==========")
+    print(f"{'Multi-Agent':<20} | {'Direct LLM':<20}")
+    print("-" * 42)
+    print(f"ATS Score:        {multi_score.get('ats_score', 0):<6}      | {direct_score.get('ats_score', 0):<6}")
+    print(f"Grammar Score:    {multi_score.get('grammar_score', 0):<6}      | {direct_score.get('grammar_score', 0):<6}")
+    print(f"Content Score:    {multi_score.get('content_score', 0):<6}      | {direct_score.get('content_score', 0):<6}")
+    print(f"Format Score:     {multi_score.get('format_score', 0):<6}      | {direct_score.get('format_score', 0):<6}")
+    print(f"Overall Score:    {multi_score.get('overall_score', 0):<6}      | {direct_score.get('overall_score', 0):<6}")
+    print("-" * 42)
+
+    # ========= Save =========
+    os.makedirs("output", exist_ok=True)
+    save_to_word(multi_agent_resume, "output/multi_agent_resume.docx")
+    save_to_word(direct_resume, "output/direct_resume.docx")
+
+    print("\nDone.")
+
+
+if __name__ == "__main__":
+    main()
